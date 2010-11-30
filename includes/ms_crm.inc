@@ -92,17 +92,17 @@ class MSCrmIFD {
 
   public function request($request, $action) {
     $headers = array(
-      "POST /MSCrmServices/2007/MSCrmServices/2007/CrmService.asmx HTTP/1.1",
+      "POST " . $this->crmPath . " HTTP/1.1",
       "Host: " . $this->crmHost,
       'Connection: keep-alive',
       "SOAPAction: " . $action,
       "Content-type: text/xml;charset=utf-8",
-      "Content-length: ".strlen($request),
-      );
+      "Content-length: " . strlen($request),
+    );
 
-    var_dump('he ');
+    // TODO: Check that crmpath has a / at the front
 
-    curl_setopt($this->cURLHandle, CURLOPT_URL, "http://" . $this->crmHost . "/MSCrmServices/2007/CrmService.asmx");
+    curl_setopt($this->cURLHandle, CURLOPT_URL, $this->crmProto . "://" . $this->crmHost . $this->crmPath);
     curl_setopt($this->cURLHandle, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($this->cURLHandle, CURLOPT_POST, 1);
     curl_setopt($this->cURLHandle, CURLOPT_POSTFIELDS, $request);
@@ -123,12 +123,13 @@ class MSCrmIFD {
   }    
 
   public function getAuthHeader() {
-    $header = '<soap:Header>
+    $header = '
+    <soap:Header>
       <CrmAuthenticationToken xmlns="http://schemas.microsoft.com/crm/2007/WebServices">
-    <AuthenticationType xmlns="http://schemas.microsoft.com/crm/2007/CoreTypes">2</AuthenticationType>
-    <OrganizationName xmlns="http://schemas.microsoft.com/crm/2007/CoreTypes">' . $this->org . '</OrganizationName>
-    </CrmAuthenticationToken>
-      </soap:Header>';
+        <AuthenticationType xmlns="http://schemas.microsoft.com/crm/2007/CoreTypes">2</AuthenticationType>
+        <OrganizationName xmlns="http://schemas.microsoft.com/crm/2007/CoreTypes">' . $this->org . '</OrganizationName>
+      </CrmAuthenticationToken>
+    </soap:Header>';
 
     return $header;
   }  
