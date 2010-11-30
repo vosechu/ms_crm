@@ -14,7 +14,6 @@ function ms_crm_cron() {
   $service->crmService = variable_get('ms_crm_path', '');
   $service->crmDisco = variable_get('ms_crm_disco', '');
   
-  xdebug_break();
   // login into service      
   $service->getAccess();
   
