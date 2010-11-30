@@ -3,9 +3,6 @@
 require_once(drupal_get_path('module', 'ms_crm') . '/includes/ms_crm.inc');
 
 function ms_crm_cron() {
-  xdebug_break();
-  /// example of use
-  
   $service = new MSCrmIFD();
         
   $service->usr = variable_get('ms_crm_username', '');
@@ -41,16 +38,14 @@ function ms_crm_cron() {
  * Implementation of hook_menu().
  */
 function ms_crm_menu() {
-  $items = array();
-
   $items['admin/settings/ms_crm'] = array(
-    'title' => 'Settings for MS Dynamics Integration',
+    'title' => 'MS Dynamics',
     'description' => 'Login and location settings for the crm integration',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('ms_crm_admin_settings'),
-    'access arguments' => array('administer ms_crm'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
   );
-
   return $items;
 }
 
