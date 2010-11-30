@@ -3,35 +3,61 @@
 require_once(drupal_get_path('module', 'ms_crm') . '/includes/ms_crm.inc');
 
 function ms_crm_cron() {
-  $service = new MSCrmIFD();
-        
-  $service->usr = variable_get('ms_crm_username', '');
-  $service->pwd = variable_get('ms_crm_password', '');
-  $service->domain = variable_get('ms_crm_domain', '');
-  $service->org = variable_get('ms_crm_organization', '');
-  $service->crmHost = variable_get('ms_crm_host', '');
-  $service->crmProto = variable_get('ms_crm_proto', '');
-  $service->crmService = variable_get('ms_crm_path', '');
-  $service->crmDisco = variable_get('ms_crm_disco', '');
-  
-  // login into service      
-  $service->getAccess();
-  
-  // prepare some request, put into request auth header
-  $request = '<?xml version="1.0" encoding="utf-8"?>
-    <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-     ' . $service->getAuthHeader() . '
+  if (!is_file('response.xml')) {
+    $service = new MSCrmIFD();
+
+    $service->usr = variable_get('ms_crm_username', '');
+    $service->pwd = variable_get('ms_crm_password', '');
+    $service->domain = variable_get('ms_crm_domain', '');
+    $service->org = variable_get('ms_crm_organization', '');
+    $service->crmHost = variable_get('ms_crm_host', '');
+    $service->crmProto = variable_get('ms_crm_proto', '');
+    $service->crmService = variable_get('ms_crm_path', '');
+    $service->crmDisco = variable_get('ms_crm_disco', '');
+
+    // login into service      
+    $service->getAccess();
+
+    $fetchxml = '
+    <fetch mapping="logical">
+      <entity name="account">
+        <attribute name="name" />
+        <attribute name="address1_line1" />
+        <attribute name="address1_line2" />
+        <attribute name="address1_postalcode" />
+        <attribute name="address1_city" />
+        <attribute name="address1_stateorprovince" />
+        <attribute name="address1_country" />
+        <attribute name="websiteurl" />
+        <attribute name="telephone1" />
+        <attribute name="accountcategorycode" />
+        <attribute name="accountclassificationcode" />
+      </entity>
+    </fetch>';
+    $fetchxml = htmlentities($fetchxml);
+
+    // prepare some request, put into request auth header
+    $request = '<?xml version="1.0" encoding="utf-8"?>
+      <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+       ' . $service->getAuthHeader() . '
         <soap:Body>
             <Fetch xmlns="http://schemas.microsoft.com/crm/2007/WebServices">
-                <fetchXml>&lt;fetch mapping=\'logical\'&gt;&lt;entity name=\'address\'&gt;&lt;all-attributes/&gt;</fetchXml>
+                <fetchXml>' . $fetchxml . '</fetchXml>
             </Fetch>
         </soap:Body>
-    </soap:Envelope>';
+      </soap:Envelope>';
 
-  // get response
-  $response = $service->request($request, 'http://schemas.microsoft.com/crm/2007/WebServices/Fetch');
-  // !!! note  '''if you get ServerServer was unable to process request error
-  // try to write down whole xml request on just one row
+    // get response
+    $response = $service->request($request, 'http://schemas.microsoft.com/crm/2007/WebServices/Fetch');
+
+    $dom = new DOMDocument();
+    $dom->loadXML(html_entity_decode($response));
+    $dom->formatOutput = true;
+    $xml = $dom->saveXML();
+    $fp = fopen('response.xml', 'w');
+    fwrite($fp, $xml);
+  }
+  $xml = new SimpleXMLElement(readfile('response.xml'));
 }
 
 /**
@@ -92,13 +118,13 @@ function ms_crm_admin_settings() {
     '#default_value' => variable_get('ms_crm_proto', ''),
   );
   $form['ms_crm_path'] = array(
-    '#title' => t('Path'),
+    '#title' => t('Service Path'),
     '#description' => t('Path to the Service asmx.'),
     '#default_value' => variable_get('ms_crm_path', '/MSCrmServices/2007/MSCrmServices/2007/CrmService.asmx'),
     '#type' => 'textfield',
   );
   $form['ms_crm_disco'] = array(
-    '#title' => t('Path'),
+    '#title' => t('Discovery Path'),
     '#description' => t('Path to the Discovery asmx.'),
     '#default_value' => variable_get('ms_crm_disco', '/MSCRMServices/2007/SPLA/CrmDiscoveryService.asmx'),
     '#type' => 'textfield',
