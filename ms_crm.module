@@ -1,0 +1,101 @@
+<?php
+
+require_once(drupal_get_path('module', 'ms_crm') . '/includes/ms_crm.inc');
+
+function ms_crm_cron() {
+  xdebug_break();
+  /// example of use
+  
+  $service = new MSCrmIFD();
+        
+  $service->usr = variable_get('ms_crm_username', '');
+  $service->pwd = variable_get('ms_crm_password', '');
+  $service->domain = variable_get('ms_crm_domain', '');
+  $service->org = variable_get('ms_crm_organization', '');
+  $service->crmHost = variable_get('ms_crm_host', '');
+  $service->crmProto = variable_get('ms_crm_proto', '');
+  $service->crmPath = variable_get('ms_crm_path', '');
+  
+  // login into service      
+  $service->getAccess();
+  
+  // prepare some request, put into request auth header
+  $request = '<?xml version="1.0" encoding="utf-8"?>
+    <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+     ' . $service->getAuthHeader() . '
+        <soap:Body>
+            <Fetch xmlns="http://schemas.microsoft.com/crm/2007/WebServices">
+                <fetchXml>&lt;fetch mapping=\'logical\'&gt;&lt;entity name=\'account\'&gt;&lt;all-attributes/&gt;</fetchXml>
+            </Fetch>
+        </soap:Body>
+    </soap:Envelope>';
+
+  // get response
+  $response = $service->request($request, 'http://schemas.microsoft.com/crm/2007/WebServices/Fetch');        
+  
+  // !!! note  '''if you get ServerServer was unable to process request error
+  // try to write down whole xml request on just one row
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function ms_crm_menu() {
+  $items = array();
+
+  $items['admin/settings/ms_crm'] = array(
+    'title' => 'Settings for MS Dynamics Integration',
+    'description' => 'Login and location settings for the crm integration',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('ms_crm_admin_settings'),
+    'access arguments' => array('administer ms_crm'),
+  );
+
+  return $items;
+}
+
+/**
+ * Settings for CRM integration
+ */
+function ms_crm_admin_settings() {
+  $form = array();
+  
+  $form['ms_crm_username'] = array(
+    '#title' => t('Username'),
+    '#description' => t(''),
+    '#type' => 'textfield',
+  );
+  $form['ms_crm_password'] = array(
+    '#title' => t('Password'),
+    '#description' => t(''),
+    '#type' => 'textfield',
+  );
+  $form['ms_crm_domain'] = array(
+    '#title' => t('AD Domain'),
+    '#description' => t('AD Domain is the bit of the username before the \. For example this AD user\'s domain would be office: office\vosechu'),
+    '#type' => 'textfield',
+  );
+  $form['ms_crm_organization'] = array(
+    '#title' => t('Organization'),
+    '#description' => t(''),
+    '#type' => 'textfield',
+  );
+  $form['ms_crm_host'] = array(
+    '#title' => t('Host'),
+    '#description' => t('Hostname without http/https before it. Do not include the path in this string.'),
+    '#type' => 'textfield',
+  );
+  $form['ms_crm_proto'] = array(
+    '#title' => t('Protocol'),
+    '#description' => t('Usually http or https'),
+    '#type' => 'textfield',
+  );
+  $form['ms_crm_path'] = array(
+    '#title' => t('Path'),
+    '#description' => t('Path to the asmx.'),
+    '#default_value' => '/MSCrmServices/2007/MSCrmServices/2007/CrmService.asmx',
+    '#type' => 'textfield',
+  );
+  
+  return(system_settings_form($form));
+}

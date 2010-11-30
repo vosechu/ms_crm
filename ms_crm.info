@@ -1,0 +1,4 @@
+name = Microsoft Dynamics CRM Integration
+description = Integration to Microsoft Dynamics CRM via IFD
+core = 6.x
+package = MTM Tweaks
