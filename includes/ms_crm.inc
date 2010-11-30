@@ -32,7 +32,9 @@ class MSCrmIFD {
 
   public $crmHost;
   public $crmProto;
-  public $crmPath;
+  public $crmService;
+  public $crmDisco;
+  
   private $crmTicket;
   private $cURLHandle;
 
@@ -58,7 +60,7 @@ class MSCrmIFD {
     
     // setup headers 
     $headers = array(
-      "POST " . $this->crmPath . " HTTP/1.1",
+      "POST " . $this->crmDisco . " HTTP/1.1",
       "Host: " . $this->crmHost,
       'Connection: Keep-Alive',
       "SOAPAction: \"http://schemas.microsoft.com/crm/2007/CrmDiscoveryService/Execute\"",
@@ -69,7 +71,7 @@ class MSCrmIFD {
     // Initialize cURL, this instance will be used for passing all requests to CrmService
     $this->cURLHandle = curl_init();
 
-    curl_setopt($this->cURLHandle, CURLOPT_URL, $this->crmProto . '://' . $this->crmHost . $this->crmPath);
+    curl_setopt($this->cURLHandle, CURLOPT_URL, $this->crmProto . '://' . $this->crmHost . $this->crmDisco);
     curl_setopt($this->cURLHandle, CURLOPT_RETURNTRANSFER, 1);
     curl_setopt($this->cURLHandle, CURLOPT_TIMEOUT, 60);
     curl_setopt($this->cURLHandle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
@@ -78,6 +80,11 @@ class MSCrmIFD {
     //assign soap XML 
     curl_setopt($this->cURLHandle, CURLOPT_POST, 1);
     curl_setopt($this->cURLHandle, CURLOPT_POSTFIELDS, $request);
+    
+    if ($this->crmProto == 'https') {
+      curl_setopt($this->cURLHandle, CURLOPT_SSL_VERIFYHOST, 0);
+      curl_setopt($this->cURLHandle, CURLOPT_SSL_VERIFYPEER, 0);
+    }
 
     $response = curl_exec($this->cURLHandle);
 
@@ -86,13 +93,14 @@ class MSCrmIFD {
       return true;
     } else {
       echo(curl_error($this->cURLHandle));
+      print_r(curl_info($this->cURLHandle));
       throw new Exception('MSCrmIFD::getAccess() IFD auth failed');
     }
   }
 
   public function request($request, $action) {
     $headers = array(
-      "POST " . $this->crmPath . " HTTP/1.1",
+      "POST " . $this->crmService . " HTTP/1.1",
       "Host: " . $this->crmHost,
       'Connection: keep-alive',
       "SOAPAction: " . $action,
@@ -102,11 +110,16 @@ class MSCrmIFD {
 
     // TODO: Check that crmpath has a / at the front
 
-    curl_setopt($this->cURLHandle, CURLOPT_URL, $this->crmProto . "://" . $this->crmHost . $this->crmPath);
+    curl_setopt($this->cURLHandle, CURLOPT_URL, $this->crmProto . "://" . $this->crmHost . $this->crmService);
     curl_setopt($this->cURLHandle, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($this->cURLHandle, CURLOPT_POST, 1);
     curl_setopt($this->cURLHandle, CURLOPT_POSTFIELDS, $request);
-
+    
+    if ($this->crmProto == 'https') {
+      curl_setopt($this->cURLHandle, CURLOPT_SSL_VERIFYHOST, 0);
+      curl_setopt($this->cURLHandle, CURLOPT_SSL_VERIFYPEER, 0);
+    }
+    
     // ticket is set into cookie, with that you dont need him in soap header anymore
     // in fact this row is most important in whole struggle with this-
     curl_setopt($this->cURLHandle, CURLOPT_COOKIE, 'MSCRMSession=ticket=' . $this->crmTicket . ';'); 

@@ -11,8 +11,10 @@ function ms_crm_cron() {
   $service->org = variable_get('ms_crm_organization', '');
   $service->crmHost = variable_get('ms_crm_host', '');
   $service->crmProto = variable_get('ms_crm_proto', '');
-  $service->crmPath = variable_get('ms_crm_path', '');
+  $service->crmService = variable_get('ms_crm_path', '');
+  $service->crmDisco = variable_get('ms_crm_disco', '');
   
+  xdebug_break();
   // login into service      
   $service->getAccess();
   
@@ -22,14 +24,13 @@ function ms_crm_cron() {
      ' . $service->getAuthHeader() . '
         <soap:Body>
             <Fetch xmlns="http://schemas.microsoft.com/crm/2007/WebServices">
-                <fetchXml>&lt;fetch mapping=\'logical\'&gt;&lt;entity name=\'account\'&gt;&lt;all-attributes/&gt;</fetchXml>
+                <fetchXml>&lt;fetch mapping=\'logical\'&gt;&lt;entity name=\'address\'&gt;&lt;all-attributes/&gt;</fetchXml>
             </Fetch>
         </soap:Body>
     </soap:Envelope>';
 
   // get response
-  $response = $service->request($request, 'http://schemas.microsoft.com/crm/2007/WebServices/Fetch');        
-  
+  $response = $service->request($request, 'http://schemas.microsoft.com/crm/2007/WebServices/Fetch');
   // !!! note  '''if you get ServerServer was unable to process request error
   // try to write down whole xml request on just one row
 }
@@ -59,36 +60,48 @@ function ms_crm_admin_settings() {
     '#title' => t('Username'),
     '#description' => t(''),
     '#type' => 'textfield',
+    '#default_value' => variable_get('ms_crm_username', ''),
   );
   $form['ms_crm_password'] = array(
     '#title' => t('Password'),
     '#description' => t(''),
     '#type' => 'textfield',
+    '#default_value' => variable_get('ms_crm_password', ''),
   );
   $form['ms_crm_domain'] = array(
     '#title' => t('AD Domain'),
     '#description' => t('AD Domain is the bit of the username before the \. For example this AD user\'s domain would be office: office\vosechu'),
     '#type' => 'textfield',
+    '#default_value' => variable_get('ms_crm_domain', ''),
   );
   $form['ms_crm_organization'] = array(
     '#title' => t('Organization'),
     '#description' => t(''),
     '#type' => 'textfield',
+    '#default_value' => variable_get('ms_crm_organization', ''),
   );
   $form['ms_crm_host'] = array(
     '#title' => t('Host'),
     '#description' => t('Hostname without http/https before it. Do not include the path in this string.'),
     '#type' => 'textfield',
+    '#default_value' => variable_get('ms_crm_host', ''),
   );
   $form['ms_crm_proto'] = array(
     '#title' => t('Protocol'),
     '#description' => t('Usually http or https'),
     '#type' => 'textfield',
+    '#default_value' => variable_get('ms_crm_proto', ''),
   );
   $form['ms_crm_path'] = array(
     '#title' => t('Path'),
-    '#description' => t('Path to the asmx.'),
-    '#default_value' => '/MSCrmServices/2007/MSCrmServices/2007/CrmService.asmx',
+    '#description' => t('Path to the Service asmx.'),
+    '#default_value' => variable_get('ms_crm_path', '/MSCrmServices/2007/MSCrmServices/2007/CrmService.asmx'),
+    '#type' => 'textfield',
+  );
+  $form['ms_crm_disco'] = array(
+    '#title' => t('Path'),
+    '#description' => t('Path to the Discovery asmx.'),
+    '#default_value' => variable_get('ms_crm_disco', '/MSCRMServices/2007/SPLA/CrmDiscoveryService.asmx'),
     '#type' => 'textfield',
   );
   
