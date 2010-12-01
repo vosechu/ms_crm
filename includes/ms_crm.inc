@@ -56,9 +56,12 @@ class MSCrmIFD {
     </soap:Body>
     </soap:Envelope>';
     
-    // TODO: Check that the path has a / at the front
+    // Make sure that the path has a slash on the front.
+    if ($this->crmDisco[0] != '/') {
+      $this->crmDisco = '/' . $this->crmDisco;
+    }
     
-    // setup headers 
+    // Setup headers 
     $headers = array(
       "POST " . $this->crmDisco . " HTTP/1.1",
       "Host: " . $this->crmHost,
@@ -77,10 +80,11 @@ class MSCrmIFD {
     curl_setopt($this->cURLHandle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
     curl_setopt($this->cURLHandle, CURLOPT_HTTPHEADER, $headers);
 
-    //assign soap XML 
+    // Assign soap XML 
     curl_setopt($this->cURLHandle, CURLOPT_POST, 1);
     curl_setopt($this->cURLHandle, CURLOPT_POSTFIELDS, $request);
     
+    // Ensure that broken SSL certs don't kill the script
     if ($this->crmProto == 'https') {
       curl_setopt($this->cURLHandle, CURLOPT_SSL_VERIFYHOST, 0);
       curl_setopt($this->cURLHandle, CURLOPT_SSL_VERIFYPEER, 0);
@@ -99,6 +103,7 @@ class MSCrmIFD {
   }
 
   public function request($request, $action) {
+    // Build headers for request
     $headers = array(
       "POST " . $this->crmService . " HTTP/1.1",
       "Host: " . $this->crmHost,
@@ -107,20 +112,24 @@ class MSCrmIFD {
       "Content-type: text/xml;charset=utf-8",
       "Content-length: " . strlen($request),
     );
-
-    // TODO: Check that crmpath has a / at the front
+    
+    // Make sure that the path has a slash on the front.
+    if ($this->crmService[0] != '/') {
+      $this->crmService = '/' . $this->crmService;
+    }
 
     curl_setopt($this->cURLHandle, CURLOPT_URL, $this->crmProto . "://" . $this->crmHost . $this->crmService);
     curl_setopt($this->cURLHandle, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($this->cURLHandle, CURLOPT_POST, 1);
     curl_setopt($this->cURLHandle, CURLOPT_POSTFIELDS, $request);
     
+    // Ensure that broken SSL certs don't kill the script
     if ($this->crmProto == 'https') {
       curl_setopt($this->cURLHandle, CURLOPT_SSL_VERIFYHOST, 0);
       curl_setopt($this->cURLHandle, CURLOPT_SSL_VERIFYPEER, 0);
     }
     
-    // ticket is set into cookie, with that you dont need him in soap header anymore
+    // Ticket is set into cookie, with that you dont need him in soap header anymore
     // in fact this row is most important in whole struggle with this-
     curl_setopt($this->cURLHandle, CURLOPT_COOKIE, 'MSCRMSession=ticket=' . $this->crmTicket . ';'); 
 

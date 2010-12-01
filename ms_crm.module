@@ -3,6 +3,9 @@
 require_once(drupal_get_path('module', 'ms_crm') . '/includes/ms_crm.inc');
 
 function ms_crm_cron() {
+  // TODO: Remove test structures so that we always download the file.
+  // TODO: Test for failure, don't update if the response fails
+  // TODO: Make sure we only run once a day
   if (!is_file('response.xml')) {
     $service = new MSCrmIFD();
 
@@ -18,25 +21,11 @@ function ms_crm_cron() {
     // login into service      
     $service->getAccess();
 
-    $fetchxml = '
-    <fetch mapping="logical">
-      <entity name="account">
-        <attribute name="name" />
-        <attribute name="address1_line1" />
-        <attribute name="address1_line2" />
-        <attribute name="address1_postalcode" />
-        <attribute name="address1_city" />
-        <attribute name="address1_stateorprovince" />
-        <attribute name="address1_country" />
-        <attribute name="websiteurl" />
-        <attribute name="telephone1" />
-        <attribute name="accountcategorycode" />
-        <attribute name="accountclassificationcode" />
-      </entity>
-    </fetch>';
-    $fetchxml = htmlentities($fetchxml);
+    // Get the FetchXML from the database and entity encode it so we can push it
+    // into the request XML code. 
+    $fetchxml = htmlentities(variable_get('ms_crm_fetchxml', ''));
 
-    // prepare some request, put into request auth header
+    // Prepare some request, put into request auth header
     $request = '<?xml version="1.0" encoding="utf-8"?>
       <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
        ' . $service->getAuthHeader() . '
@@ -47,9 +36,11 @@ function ms_crm_cron() {
         </soap:Body>
       </soap:Envelope>';
 
-    // get response
+    // Get response
     $response = $service->request($request, 'http://schemas.microsoft.com/crm/2007/WebServices/Fetch');
 
+    // TODO: This should not be saved this way, we should save from SimpleXMLElement
+    // or not save at all
     $dom = new DOMDocument();
     $dom->loadXML(html_entity_decode($response));
     $dom->formatOutput = true;
@@ -64,7 +55,7 @@ function ms_crm_cron() {
  * Implementation of hook_menu().
  */
 function ms_crm_menu() {
-  $items['admin/settings/ms_crm'] = array(
+  $items['admin/settings/ms-crm'] = array(
     'title' => 'MS Dynamics',
     'description' => 'Login and location settings for the crm integration',
     'page callback' => 'drupal_get_form',
@@ -128,6 +119,11 @@ function ms_crm_admin_settings() {
     '#description' => t('Path to the Discovery asmx.'),
     '#default_value' => variable_get('ms_crm_disco', '/MSCRMServices/2007/SPLA/CrmDiscoveryService.asmx'),
     '#type' => 'textfield',
+  );
+  $form['ms_crm_fetchxml'] = array(
+    '#title' => t('FetchXML Statement'),
+    '#default_value' => variable_get('ms_crm_fetchxml', ''),
+    '#type' => 'textarea',
   );
   
   return(system_settings_form($form));
