@@ -6,6 +6,8 @@ function ms_crm_cron() {
   // TODO: Remove test structures so that we always download the file.
   // TODO: Test for failure, don't update if the response fails
   // TODO: Make sure we only run once a day
+  // TODO: Add module invokes to allow people to edit what happens with the 
+  // data after we pull it down.
   if (!is_file('response.xml')) {
     $service = new MSCrmIFD();
 
@@ -41,14 +43,130 @@ function ms_crm_cron() {
 
     // TODO: This should not be saved this way, we should save from SimpleXMLElement
     // or not save at all
-    $dom = new DOMDocument();
-    $dom->loadXML(html_entity_decode($response));
-    $dom->formatOutput = true;
-    $xml = $dom->saveXML();
+    $xml = new SimpleXMLElement(html_entity_decode($response));
     $fp = fopen('response.xml', 'w');
-    fwrite($fp, $xml);
+    fwrite($fp, $xml->asXML());
   }
-  $xml = new SimpleXMLElement(readfile('response.xml'));
+  $xml = simplexml_load_file('response.xml');
+  
+  $results = $xml->xpath('/soap:Envelope/soap:Body');
+  $results = $results[0]->FetchResponse->FetchResult->resultset->result;
+
+  foreach($results as $result) {
+    if ($nid = ms_crm_load((string) $result->accountid)) {
+      $node = node_load($nid);
+      print 'account found';
+      continue;
+      // Check to see if anything is updated
+        // If so change these things
+      // Check to see if the location is at all different
+        // If so delete the old location object
+        // Then create a new location object
+        // Save it and associate it with the node
+      // Otherwise just continue with the next item in the list
+    }
+    else {
+      $node = ms_crm_create($result);
+    }
+    
+    // Save the node and its changes
+    node_save($node);
+  }
+}
+
+/**
+ * Load up an account by account_id returned by the CRM system. Returns the nid 
+ * of a node with that account_id.
+ */
+function ms_crm_load($account_id) {
+  list($table, $column) = helper_cck_field_sql('field_account_id');
+  return db_result(db_query('SELECT nid FROM {%s} WHERE %s = "%s"', $table, $column, $account_id));
+}
+
+/**
+ * Create a new reseller object based on the $result SimpleXMLElement passed in.
+ * This will almost certainly only be called from ms_crm_cron.
+ * the SimpleXMLElement should be created from a snippet like this:
+ * <code>
+ * <?xml version="1.0" encoding="utf-8"?>
+ * <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+ * <soap:Body>
+ *  <FetchResponse xmlns="http://schemas.microsoft.com/crm/2007/WebServices">
+ *    <FetchResult>
+ *      <resultset morerecords="0" paging-cookie="&lt;cookie page=&quot;1&quot;&gt;&lt;accountid last=&quot;{8FA37981-2119-DE11-AD3A-0015C5FDF4E6}&quot; first=&quot;{7AA1FC5A-697E-DF11-889C-0015C5FD522D}&quot; /&gt;&lt;/cookie&gt;">
+ *        <result>
+ *          <name>Davoco LLC</name>
+ *          <address1_line1>167 Polk Street</address1_line1>
+ *          <address1_line2>Suite 10</address1_line2>
+ *          <address1_postalcode>13601</address1_postalcode>
+ *          <address1_city>Watertown</address1_city>
+ *          <address1_stateorprovince>NY</address1_stateorprovince>
+ *          <websiteurl>http://www.davoco.com</websiteurl>
+ *          <telephone1>480-751-4000</telephone1>
+ *          <accountcategorycode name="PC Reseller" formattedvalue="200002">200002</accountcategorycode>
+ *          <accountclassificationcode name="United States" formattedvalue="200002">200002</accountclassificationcode>
+ *          <accountid>{B5C407DC-39A9-DF11-88B7-0015C5FD522D}</accountid>
+ *        </result>
+ *      </resultset>
+ *     </FetchResult>
+ *   </FetchResponse>
+ * </soap:Body>
+ * <code>
+ */
+function ms_crm_create($result) {
+  $node = new stdClass();
+  $node->type = 'reseller';
+  $node->title = (string) $result->name;
+
+  // Create a new location and associate it with the node
+  $location = ms_crm_location_create($result);
+  $node->locations[0] = $location;
+  $node->location = $location;
+  
+  // Pull in the website url
+  $node->field_url[0]['value'] = (string) $result->websiteurl;
+  
+  // Store the account id so we can check to see if this has been updated
+  $node->field_account_id[0]['value'] = (string) $result->accountid;
+  
+  switch ($result->accountcategorycode) {
+    case 200002:
+      $term = taxonomy_get_term_by_name('PC Reseller');
+      $node->taxonomy[$term[0]->tid] = $term[0];
+      break;
+    case 200003:
+      $term = taxonomy_get_term_by_name('A/V Reseller');
+      $node->taxonomy[$term[0]->tid] = $term[0];
+      break;
+  }
+  
+  print_r($node);
+  
+  return $node;
+}
+
+function ms_crm_location_create($result) {
+  // Translate the country name into country code
+  $country_list = location_get_iso3166_list();
+  $country_code = array_search($result->address1_country, $country_list);
+  
+  // Create a location object out of the location details and save it
+  $loc = array();
+  $loc['street'] = (string) $result->address1_line1;
+  $loc['additional'] = (string) $result->address1_line2;
+  $loc['city'] = (string) $result->address1_city;
+  $loc['province'] = (string) strtoupper($result->address1_stateorprovince);
+  $loc['postal_code'] = (string) $result->address1_postalcode;
+  $loc['country'] = (string) strtolower($country_code);
+  $loc['phone'] = (string) $result->telephone1;
+
+  // Create the actual location object and add it to the CCK attached location field
+  $lid = location_save($loc, TRUE, $node->locations[0]['lid']);
+  $location = location_load_location($lid);
+  // $loc['lid'] = 1;
+  // $location = $loc;
+  
+  return $location;
 }
 
 /**
@@ -127,4 +245,24 @@ function ms_crm_admin_settings() {
   );
   
   return(system_settings_form($form));
+}
+
+/**
+ * function to get the TABLE or COLUMN for a CCK FIELD
+ * method adapted from http://drewish.com/content/2010/06/correctly_accessing_cck_fields_in_sql_queries
+ * and taken from http://benbuckman.net/tech/10/08/drupal-using-cck-fieldss-inconsistent-tables-custom-queries
+ *
+ * @param $field_name
+ * @param $type 'table' or 'column'
+ *
+ * to get both table and column, run function twice with each $type
+ */
+function helper_cck_field_sql($field_name, $type='table') {
+  $field = content_fields($field_name);
+  $db_info = content_database_info($field);
+ 
+  if (isset($db_info['table']) && isset($db_info['columns']['value']['column'])) {
+    return array($db_info['table'], $db_info['columns']['value']['column']);
+  }
+  return NULL;
 }

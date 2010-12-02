@@ -158,6 +158,6 @@ class MSCrmIFD {
 
   public function closeConnection() {
     curl_close($this->cURLHandle);
-  }          
+  }
 }
 ?>
