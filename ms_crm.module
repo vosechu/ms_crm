@@ -55,6 +55,9 @@ function ms_crm_cron() {
   foreach($results as $result) {
     if ($nid = ms_crm_load((string) $result->accountid)) {
       $node = node_load($nid);
+      foreach ($result as $attr) {
+        // print_r($attr);
+      }
       print 'account found';
       continue;
       // Check to see if anything is updated
@@ -129,12 +132,12 @@ function ms_crm_create($result) {
   // Store the account id so we can check to see if this has been updated
   $node->field_account_id[0]['value'] = (string) $result->accountid;
   
-  switch ($result->accountcategorycode) {
-    case 200002:
+  switch ($result->accountcategorycode['name']) {
+    case 'PC Reseller':
       $term = taxonomy_get_term_by_name('PC Reseller');
       $node->taxonomy[$term[0]->tid] = $term[0];
       break;
-    case 200003:
+    case 'AV Reseller':
       $term = taxonomy_get_term_by_name('A/V Reseller');
       $node->taxonomy[$term[0]->tid] = $term[0];
       break;
