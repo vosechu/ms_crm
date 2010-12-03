@@ -51,30 +51,84 @@ function ms_crm_cron() {
   
   $results = $xml->xpath('/soap:Envelope/soap:Body');
   $results = $results[0]->FetchResponse->FetchResult->resultset->result;
-
+xdebug_break();
   foreach($results as $result) {
     if ($nid = ms_crm_load((string) $result->accountid)) {
       $node = node_load($nid);
-      foreach ($result as $attr) {
-        // print_r($attr);
+      foreach ($result as $key => $attr) {
+        // Check for changes in the node. If there are any just rebuild the whole node.
+        $dirty = FALSE;
+        switch ($key) {
+          case 'accountid': 
+          case 'accountclassificationcode':
+            break;
+          case 'name':
+            $dirty = ((string) $result->name != $node->title) ? TRUE : FALSE;
+            break;
+          case 'address1_line1':
+            $dirty = ((string) $result->address1_line1 != $node->location['street']) ? TRUE : FALSE;
+            break;
+          case 'address1_line2':
+            $dirty = ((string) $result->address1_line2 != $node->location['additional']) ? TRUE : FALSE;
+            break;
+          case 'address1_city':
+            $dirty = ((string) $result->address1_city != $node->location['city']) ? TRUE : FALSE;
+            break;
+          case 'address1_stateorprovince':
+            if ((string) $result->address1_stateorprovince != $node->location['province']) {
+              // It's entirely possible that someone has put something in the state
+              // field for a country that has no states. This will always end with
+              // location failing to write that to the database so this will always
+              // be dirty unless we check for it.
+              $provinces = location_get_provinces($node->location['country']);
+              if (count($provinces) != 0) {
+                $dirty = TRUE;
+              }
+            }
+            break;
+          case 'address1_postalcode':
+            $dirty = ((string) $result->address1_postalcode != $node->location['postal_code']) ? TRUE : FALSE;
+            break;
+          case 'address1_country':
+            $r_country = (string) $result->address1_country;
+            $r_country = ms_crm_misspellings(ucwords(strtolower($r_country)));
+            $dirty = ($r_country != $node->location['country_name']) ? TRUE : FALSE;
+            break;
+          case 'telephone1':
+            $dirty = ((string) $result->telephone1 != $node->location['phone']) ? TRUE : FALSE;
+            break;
+          case 'websiteurl':
+            $dirty = ((string) $result->websiteurl != $node->field_url[0]['value']) ? TRUE : FALSE;
+            break;
+          case 'accountcategorycode':
+            $term = array_shift($node->taxonomy);
+            $dirty = ((string) $result->accountcategorycode['name'] != $term->name) ? TRUE : FALSE;
+            break;
+        }
+        // If any attribute is different just update the whole thing with new values
+        if ($dirty) {
+          break 1; // Break out of the loop as soon as we find an attribute that's dirty
+        }
       }
-      print 'account found';
-      continue;
-      // Check to see if anything is updated
-        // If so change these things
-      // Check to see if the location is at all different
-        // If so delete the old location object
-        // Then create a new location object
-        // Save it and associate it with the node
-      // Otherwise just continue with the next item in the list
+      if ($dirty) {
+        $statuses['updated']++;
+        $node = ms_crm_update($node, $result);
+      }
+      else {
+        $statuses['not_changed']++;
+      }
     }
     else {
+      $statuses['created']++;
       $node = ms_crm_create($result);
     }
-    
-    // Save the node and its changes
-    node_save($node);
+    $statuses['total']++;
   }
+  
+  echo " Total: " . $statuses['total'] .
+       " Created: " . $statuses['created'] . 
+       " Updated: " . $statuses['updated'] .
+       " Not Changed: " . $statuses['not_changed'] . PHP_EOL;
 }
 
 /**
@@ -98,17 +152,17 @@ function ms_crm_load($account_id) {
  *    <FetchResult>
  *      <resultset morerecords="0" paging-cookie="&lt;cookie page=&quot;1&quot;&gt;&lt;accountid last=&quot;{8FA37981-2119-DE11-AD3A-0015C5FDF4E6}&quot; first=&quot;{7AA1FC5A-697E-DF11-889C-0015C5FD522D}&quot; /&gt;&lt;/cookie&gt;">
  *        <result>
- *          <name>Davoco LLC</name>
- *          <address1_line1>167 Polk Street</address1_line1>
+ *          <name>Terrifico LLC</name>
+ *          <address1_line1>S Terrific Street </address1_line1>
  *          <address1_line2>Suite 10</address1_line2>
- *          <address1_postalcode>13601</address1_postalcode>
+ *          <address1_postalcode>13602</address1_postalcode>
  *          <address1_city>Watertown</address1_city>
  *          <address1_stateorprovince>NY</address1_stateorprovince>
- *          <websiteurl>http://www.davoco.com</websiteurl>
- *          <telephone1>480-751-4000</telephone1>
+ *          <websiteurl>http://www.terrifico.com</websiteurl>
+ *          <telephone1>123-456-7890</telephone1>
  *          <accountcategorycode name="PC Reseller" formattedvalue="200002">200002</accountcategorycode>
  *          <accountclassificationcode name="United States" formattedvalue="200002">200002</accountclassificationcode>
- *          <accountid>{B5C407DC-39A9-DF11-88B7-0015C5FD522D}</accountid>
+ *          <accountid>{C1A406DC-39A9-DF11-88B7-0015C5FD522D}</accountid>
  *        </result>
  *      </resultset>
  *     </FetchResult>
@@ -120,8 +174,24 @@ function ms_crm_create($result) {
   $node = new stdClass();
   $node->type = 'reseller';
   $node->title = (string) $result->name;
+  
+  return ms_crm_build($node, $result);
+}
 
-  // Create a new location and associate it with the node
+/**
+ * Update the reseller object
+ * @see ms_crm_create
+ */
+function ms_crm_update($node, $result) {
+  return ms_crm_build($node, $result);
+}
+
+/**
+ * Build and save the reseller object.
+ * @see ms_crm_create
+ */
+function ms_crm_build($node, $result) {
+  // Create/Update a new location and associate it with the node
   $location = ms_crm_location_create($result);
   $node->locations[0] = $location;
   $node->location = $location;
@@ -138,38 +208,85 @@ function ms_crm_create($result) {
       $node->taxonomy[$term[0]->tid] = $term[0];
       break;
     case 'AV Reseller':
-      $term = taxonomy_get_term_by_name('A/V Reseller');
+      $term = taxonomy_get_term_by_name('AV Reseller');
       $node->taxonomy[$term[0]->tid] = $term[0];
       break;
   }
   
-  print_r($node);
+  node_save($node);
   
   return $node;
 }
 
-function ms_crm_location_create($result) {
+function ms_crm_location_create($result, $node = NULL) {
   // Translate the country name into country code
   $country_list = location_get_iso3166_list();
-  $country_code = array_search($result->address1_country, $country_list);
+  $r_country = (string) $result->address1_country;
+  $r_country = ms_crm_misspellings(ucwords(strtolower($r_country)));
+  $country_code = array_search($r_country, $country_list);
+  if (!$country_code) {
+    if (location_province_code('us', (string) $result->address1_stateorprovince) != '') {
+      $country_code = 'us';
+    }
+  }
+  if (!$country_code) {
+    print("Invalid country: " . $r_country . PHP_EOL);
+  }
   
   // Create a location object out of the location details and save it
-  $loc = array();
+  $loc = $node ? $node->location : array();
   $loc['street'] = (string) $result->address1_line1;
   $loc['additional'] = (string) $result->address1_line2;
   $loc['city'] = (string) $result->address1_city;
   $loc['province'] = (string) strtoupper($result->address1_stateorprovince);
   $loc['postal_code'] = (string) $result->address1_postalcode;
-  $loc['country'] = (string) strtolower($country_code);
+  $loc['country'] = $country_code;
   $loc['phone'] = (string) $result->telephone1;
 
   // Create the actual location object and add it to the CCK attached location field
   $lid = location_save($loc, TRUE, $node->locations[0]['lid']);
   $location = location_load_location($lid);
-  // $loc['lid'] = 1;
-  // $location = $loc;
   
   return $location;
+}
+
+/**
+ * There are a number of... regretable misspellings in the CRM database. We will
+ * need a pretty solid way to deal with this but I don't think making an admin
+ * interface is really necessary. 
+ * This function merely maps between a misspelling and its actual country name as
+ * listed by ISO3166. 
+ */
+function ms_crm_misspellings($country_name) {
+  switch ($country_name) {
+    case 'Columbia':
+      return 'Colombia';
+    case 'Usunited States':
+    case 'Untied States':
+    case 'Usa':
+    case 'Us':
+      return 'United States';
+    case 'Ca':
+      return 'Canada';
+    case 'Korea':
+      return 'South Korea';
+    case 'Sg':
+      return 'Singapore';
+    case 'Uae':
+      return 'United Arab Emirates';
+    case 'Mt':
+      return 'Malta';
+    case 'Ar':
+      return 'Argentina';
+    case 'Cayman Islands, Bwi':
+      return 'Cayman Islands';
+    case 'St Lucia':
+      return 'Saint Lucia';
+    case 'Trinidad':
+      return 'Trinidad and Tobago';
+    default:
+      return $country_name;
+  }
 }
 
 /**
