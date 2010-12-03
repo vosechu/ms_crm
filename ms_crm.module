@@ -3,55 +3,60 @@
 require_once(drupal_get_path('module', 'ms_crm') . '/includes/ms_crm.inc');
 
 function ms_crm_cron() {
-  // TODO: Remove test structures so that we always download the file.
   // TODO: Test for failure, don't update if the response fails
   // TODO: Make sure we only run once a day
   // TODO: Add module invokes to allow people to edit what happens with the 
   // data after we pull it down.
-  if (!is_file('response.xml')) {
-    $service = new MSCrmIFD();
+  $service = new MSCrmIFD();
 
-    $service->usr = variable_get('ms_crm_username', '');
-    $service->pwd = variable_get('ms_crm_password', '');
-    $service->domain = variable_get('ms_crm_domain', '');
-    $service->org = variable_get('ms_crm_organization', '');
-    $service->crmHost = variable_get('ms_crm_host', '');
-    $service->crmProto = variable_get('ms_crm_proto', '');
-    $service->crmService = variable_get('ms_crm_path', '');
-    $service->crmDisco = variable_get('ms_crm_disco', '');
+  $service->usr = variable_get('ms_crm_username', '');
+  $service->pwd = variable_get('ms_crm_password', '');
+  $service->domain = variable_get('ms_crm_domain', '');
+  $service->org = variable_get('ms_crm_organization', '');
+  $service->crmHost = variable_get('ms_crm_host', '');
+  $service->crmProto = variable_get('ms_crm_proto', '');
+  $service->crmService = variable_get('ms_crm_path', '');
+  $service->crmDisco = variable_get('ms_crm_disco', '');
 
+  try {
     // login into service      
     $service->getAccess();
+  }
+  catch (Exception $e) {
+    watchdog('ms_crm', 'Failed to connect to authentication service (' . $e . ')', array(), WATCHDOG_ERROR);
+    return false;
+  }
 
-    // Get the FetchXML from the database and entity encode it so we can push it
-    // into the request XML code. 
-    $fetchxml = htmlentities(variable_get('ms_crm_fetchxml', ''));
+  // Get the FetchXML from the database and entity encode it so we can push it
+  // into the request XML code. 
+  $fetchxml = htmlentities(variable_get('ms_crm_fetchxml', ''));
 
-    // Prepare some request, put into request auth header
-    $request = '<?xml version="1.0" encoding="utf-8"?>
-      <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-       ' . $service->getAuthHeader() . '
-        <soap:Body>
-            <Fetch xmlns="http://schemas.microsoft.com/crm/2007/WebServices">
-                <fetchXml>' . $fetchxml . '</fetchXml>
-            </Fetch>
-        </soap:Body>
-      </soap:Envelope>';
+  // Prepare some request, put into request auth header
+  $request = '<?xml version="1.0" encoding="utf-8"?>
+    <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+     ' . $service->getAuthHeader() . '
+      <soap:Body>
+          <Fetch xmlns="http://schemas.microsoft.com/crm/2007/WebServices">
+              <fetchXml>' . $fetchxml . '</fetchXml>
+          </Fetch>
+      </soap:Body>
+    </soap:Envelope>';
 
+  try {
     // Get response
     $response = $service->request($request, 'http://schemas.microsoft.com/crm/2007/WebServices/Fetch');
 
-    // TODO: This should not be saved this way, we should save from SimpleXMLElement
-    // or not save at all
+    // Create the xml object from the response
     $xml = new SimpleXMLElement(html_entity_decode($response));
-    $fp = fopen('response.xml', 'w');
-    fwrite($fp, $xml->asXML());
   }
-  $xml = simplexml_load_file('response.xml');
+  catch (Exception $e) {
+    watchdog('ms_crm', 'Failed to download new data (' . $e . ')', array(), WATCHDOG_ERROR);
+    return false;
+  }
   
   $results = $xml->xpath('/soap:Envelope/soap:Body');
   $results = $results[0]->FetchResponse->FetchResult->resultset->result;
-xdebug_break();
+
   foreach($results as $result) {
     if ($nid = ms_crm_load((string) $result->accountid)) {
       $node = node_load($nid);

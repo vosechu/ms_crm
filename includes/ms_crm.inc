@@ -96,9 +96,9 @@ class MSCrmIFD {
       $this->crmTicket = $matches[1];
       return true;
     } else {
-      echo(curl_error($this->cURLHandle));
-      print_r(curl_info($this->cURLHandle));
-      throw new Exception('MSCrmIFD::getAccess() IFD auth failed');
+      $error = curl_error($this->cURLHandle);
+      (function_exists('curl_info')) ? $error .= curl_info($this->cURLHandle) : '';
+      throw new Exception('MSCrmIFD::getAccess() IFD auth failed | ' . $error);
     }
   }
 
@@ -137,7 +137,6 @@ class MSCrmIFD {
     $responseHeaders = curl_getinfo($this->cURLHandle);
 
     if ($responseHeaders['http_code'] != 200) {
-      print_r($response);
       die('MSCrmIFD::__doRequest() failed');
     }
 
